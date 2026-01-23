@@ -1,382 +1,468 @@
-import React, { useState } from 'react';
-import { base44 } from '@/api/base44Client';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import PageHeader from '@/components/ui/PageHeader';
-import AppointmentModal from '@/components/modals/AppointmentModal';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import React, { useState, useEffect } from "react";
+import { Appointment, Client, Notice } from "@/api/entities";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { 
-  MoreVertical,
-  Pencil,
+  Calendar as CalendarIcon, 
+  Clock, 
+  MapPin, 
+  Plus, 
+  ChevronLeft, 
+  ChevronRight, 
   Trash2,
-  Calendar,
-  Clock,
-  MapPin,
-  User,
-  ChevronLeft,
-  ChevronRight
-} from 'lucide-react';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Skeleton } from '@/components/ui/skeleton';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths, isToday, parseISO } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+  Lock
+} from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
+import { cn } from "@/lib/utils";
+import { 
+  format, 
+  addMonths, 
+  subMonths, 
+  startOfMonth, 
+  endOfMonth, 
+  startOfWeek, 
+  endOfWeek, 
+  eachDayOfInterval, 
+  isSameMonth, 
+  isSameDay, 
+  isToday,
+  parseISO 
+} from "date-fns";
+import { ptBR } from "date-fns/locale";
 
-const typeLabels = {
-  audiencia: 'Audiência',
-  reuniao: 'Reunião',
-  prazo: 'Prazo',
-  consulta: 'Consulta',
-  pericia: 'Perícia',
-  diligencia: 'Diligência',
-  outros: 'Outros'
-};
-
-const typeColors = {
-  audiencia: 'bg-red-100 text-red-800',
-  reuniao: 'bg-blue-100 text-blue-800',
-  prazo: 'bg-orange-100 text-orange-800',
-  consulta: 'bg-green-100 text-green-800',
-  pericia: 'bg-purple-100 text-purple-800',
-  diligencia: 'bg-cyan-100 text-cyan-800',
-  outros: 'bg-gray-100 text-gray-800'
-};
-
-const statusLabels = {
-  agendado: 'Agendado',
-  confirmado: 'Confirmado',
-  realizado: 'Realizado',
-  cancelado: 'Cancelado',
-  remarcado: 'Remarcado'
-};
-
-export default function Appointments() {
-  const [modalOpen, setModalOpen] = useState(false);
-  const [selectedAppointment, setSelectedAppointment] = useState(null);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [appointmentToDelete, setAppointmentToDelete] = useState(null);
-  const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [viewMode, setViewMode] = useState('list');
-  const [selectedDate, setSelectedDate] = useState(null);
-
-  const queryClient = useQueryClient();
-
-  const { data: appointments = [], isLoading } = useQuery({
-    queryKey: ['appointments'],
-    queryFn: () => base44.entities.Appointment.list('-date')
+const Appointments = () => {
+  const [appointments, setAppointments] = useState([]);
+  const [clients, setClients] = useState([]);
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  
+  const [formData, setFormData] = useState({
+    title: "",
+    client_name: "",
+    date: format(new Date(), "yyyy-MM-dd"),
+    time: "09:00",
+    type: "reuniao",
+    observation: ""
   });
 
-  const { data: clients = [] } = useQuery({
-    queryKey: ['clients'],
-    queryFn: () => base44.entities.Client.list()
-  });
+  const { toast } = useToast();
 
-  const { data: processes = [] } = useQuery({
-    queryKey: ['processes'],
-    queryFn: () => base44.entities.Process.list()
-  });
+  useEffect(() => {
+    fetchData();
+  }, []);
 
-  const createMutation = useMutation({
-    mutationFn: (data) => base44.entities.Appointment.create(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['appointments'] });
-      setModalOpen(false);
-      setSelectedAppointment(null);
-    }
-  });
+  const fetchData = async () => {
+    try {
+      const [apptData, clientData, noticeData] = await Promise.all([
+        Appointment.list(),
+        Client.list(),
+        Notice.list()
+      ]);
 
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.Appointment.update(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['appointments'] });
-      setModalOpen(false);
-      setSelectedAppointment(null);
-    }
-  });
+      const noticesAsAppointments = noticeData
+        .filter(n => n.status === 'ativo')
+        .map(n => ({
+          id: `notice-${n.id}`,
+          title: `[AVISO] ${n.title}`,
+          date: n.date ? n.date.split('T')[0] : format(new Date(), "yyyy-MM-dd"),
+          time: '08:00',
+          type: 'prazo',
+          client_name: 'Interno',
+          observation: n.content,
+          isReadOnly: true
+        }));
 
-  const deleteMutation = useMutation({
-    mutationFn: (id) => base44.entities.Appointment.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['appointments'] });
-      setDeleteDialogOpen(false);
-      setAppointmentToDelete(null);
-    }
-  });
-
-  const handleSave = (data) => {
-    if (selectedAppointment) {
-      updateMutation.mutate({ id: selectedAppointment.id, data });
-    } else {
-      createMutation.mutate(data);
+      const combined = [...apptData, ...noticesAsAppointments];
+      
+      setAppointments(combined);
+      setClients(clientData);
+    } catch (error) {
+      console.error(error);
     }
   };
 
-  const handleEdit = (appointment) => {
-    setSelectedAppointment(appointment);
-    setModalOpen(true);
+  const handlePrevMonth = () => setCurrentDate(subMonths(currentDate, 1));
+  const handleNextMonth = () => setCurrentDate(addMonths(currentDate, 1));
+
+  const handleDateClick = (date) => {
+    setSelectedDate(date);
+    setFormData({ ...formData, date: format(date, "yyyy-MM-dd") });
   };
 
-  const handleDelete = (appointment) => {
-    setAppointmentToDelete(appointment);
-    setDeleteDialogOpen(true);
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await Appointment.create({
+        ...formData,
+        status: "agendado"
+      });
+      toast({ title: "Compromisso agendado!" });
+      setIsDialogOpen(false);
+      fetchData();
+      
+      setFormData({
+        title: "",
+        client_name: "",
+        date: format(selectedDate, "yyyy-MM-dd"),
+        time: "09:00",
+        type: "reuniao",
+        observation: ""
+      });
+    } catch (error) {
+      toast({ variant: "destructive", title: "Erro ao agendar" });
+    }
   };
 
-  // Calendar logic
-  const monthStart = startOfMonth(currentMonth);
-  const monthEnd = endOfMonth(currentMonth);
-  const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
+  const handleDelete = async (item) => {
+    if (item.isReadOnly) {
+      toast({
+        title: "Ação Bloqueada",
+        description: "Para remover este item, vá até a aba de Avisos e marque como concluído.",
+        className: "bg-amber-600 text-white border-none"
+      });
+      return;
+    }
 
-  const getAppointmentsForDay = (date) => {
-    return appointments.filter(a => a.date && isSameDay(parseISO(a.date), date));
+    if (confirm("Deseja cancelar este compromisso?")) {
+      try {
+        await Appointment.delete(item.id);
+        fetchData();
+        toast({ title: "Compromisso cancelado" });
+      } catch (error) {
+        console.error(error);
+      }
+    }
   };
 
-  const today = new Date().toISOString().split('T')[0];
-  const upcomingAppointments = appointments
-    .filter(a => a.date >= today && a.status !== 'cancelado')
-    .sort((a, b) => a.date.localeCompare(b.date));
+  const getTypeColor = (type) => {
+    switch (type) {
+      case "audiencia": return "bg-red-500";
+      case "reuniao": return "bg-blue-500";
+      case "prazo": return "bg-amber-500"; 
+      case "consulta": return "bg-green-500";
+      default: return "bg-slate-500";
+    }
+  };
 
-  const filteredAppointments = selectedDate 
-    ? appointments.filter(a => a.date === format(selectedDate, 'yyyy-MM-dd'))
-    : upcomingAppointments;
+  const getTypeLabel = (type) => {
+    switch (type) {
+      case "audiencia": return "Audiência";
+      case "reuniao": return "Reunião";
+      case "prazo": return "Prazo / Aviso";
+      case "consulta": return "Consulta";
+      default: return "Outros";
+    }
+  };
+
+  const monthStart = startOfMonth(currentDate);
+  const monthEnd = endOfMonth(monthStart);
+  const startDate = startOfWeek(monthStart);
+  const endDate = endOfWeek(monthEnd);
+  
+  const calendarDays = eachDayOfInterval({ start: startDate, end: endDate });
+
+  const selectedDayAppointments = appointments
+    .filter(appt => {
+      if (!appt.date) return false;
+      const apptDate = appt.date.includes('T') ? appt.date.split('T')[0] : appt.date;
+      return isSameDay(parseISO(apptDate), selectedDate);
+    })
+    .sort((a, b) => a.time.localeCompare(b.time));
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Agenda"
-        subtitle="Gerencie seus compromissos"
-        action={() => {
-          setSelectedAppointment(null);
-          setModalOpen(true);
-        }}
-        actionLabel="Novo Compromisso"
-      />
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Agenda</h1>
+          <p className="text-slate-500 mt-1">Gerencie seus prazos, audiências e reuniões.</p>
+        </div>
 
-      {/* View Toggle */}
-      <div className="flex justify-between items-center">
-        <Tabs value={viewMode} onValueChange={setViewMode}>
-          <TabsList>
-            <TabsTrigger value="list">Lista</TabsTrigger>
-            <TabsTrigger value="calendar">Calendário</TabsTrigger>
-          </TabsList>
-        </Tabs>
-
-        {viewMode === 'calendar' && (
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}>
-              <ChevronLeft className="w-5 h-5" />
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogTrigger asChild>
+            <Button className="bg-[#1a1a1a] hover:bg-[#c9a962] hover:text-[#1a1a1a] transition-all">
+              <Plus className="w-4 h-4 mr-2" />
+              Novo Compromisso
             </Button>
-            <span className="font-medium min-w-[150px] text-center">
-              {format(currentMonth, 'MMMM yyyy', { locale: ptBR })}
-            </span>
-            <Button variant="ghost" size="icon" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}>
-              <ChevronRight className="w-5 h-5" />
-            </Button>
-          </div>
-        )}
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Novo Agendamento</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+              <div>
+                <Label>Título</Label>
+                <Input 
+                  value={formData.title} 
+                  onChange={e => setFormData({...formData, title: e.target.value})}
+                  placeholder="Ex: Reunião com Cliente" 
+                  required 
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Data</Label>
+                  <Input 
+                    type="date" 
+                    value={formData.date}
+                    onChange={e => setFormData({...formData, date: e.target.value})}
+                    required 
+                  />
+                </div>
+                <div>
+                  <Label>Horário</Label>
+                  <Input 
+                    type="time" 
+                    value={formData.time}
+                    onChange={e => setFormData({...formData, time: e.target.value})}
+                    required 
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Tipo</Label>
+                  <Select 
+                    value={formData.type} 
+                    onValueChange={v => setFormData({...formData, type: v})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="reuniao">Reunião</SelectItem>
+                      <SelectItem value="audiencia">Audiência</SelectItem>
+                      <SelectItem value="consulta">Consulta</SelectItem>
+                      <SelectItem value="prazo">Prazo / Aviso</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Cliente (Opcional)</Label>
+                  <Select 
+                    value={formData.client_name} 
+                    onValueChange={v => setFormData({...formData, client_name: v})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Interno">Interno / Escritório</SelectItem>
+                      {clients.map(c => (
+                        <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div>
+                <Label>Observações</Label>
+                <Textarea 
+                  value={formData.observation}
+                  onChange={e => setFormData({...formData, observation: e.target.value})}
+                />
+              </div>
+              <Button type="submit" className="w-full bg-[#1a1a1a] hover:bg-[#c9a962] hover:text-[#1a1a1a]">Agendar</Button>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Calendar View */}
-        {viewMode === 'calendar' && (
-          <Card className="lg:col-span-2 p-4">
-            <div className="grid grid-cols-7 gap-1 mb-2">
-              {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(day => (
-                <div key={day} className="text-center text-sm font-medium text-gray-500 py-2">
-                  {day}
-                </div>
-              ))}
-            </div>
-            <div className="grid grid-cols-7 gap-1">
-              {Array.from({ length: monthStart.getDay() }).map((_, i) => (
-                <div key={`empty-${i}`} className="h-24" />
-              ))}
-              {daysInMonth.map(day => {
-                const dayAppointments = getAppointmentsForDay(day);
-                const isSelected = selectedDate && isSameDay(day, selectedDate);
-                const isDayToday = isToday(day);
-                
-                return (
-                  <button
-                    key={day.toISOString()}
-                    onClick={() => setSelectedDate(day)}
-                    className={`h-24 p-1 border rounded-lg text-left transition-colors
-                      ${isSelected ? 'border-[#1a1a1a] bg-gray-50' : 'border-gray-100 hover:border-gray-200'}
-                      ${isDayToday ? 'bg-[#c9a962]/10' : ''}
-                    `}
-                  >
-                    <span className={`text-sm font-medium ${isDayToday ? 'text-[#c9a962]' : 'text-gray-700'}`}>
-                      {format(day, 'd')}
-                    </span>
-                    <div className="mt-1 space-y-1 overflow-hidden">
-                      {dayAppointments.slice(0, 2).map(apt => (
-                        <div 
-                          key={apt.id}
-                          className={`text-xs px-1 py-0.5 rounded truncate ${typeColors[apt.type]}`}
-                        >
-                          {apt.time && `${apt.time} `}{apt.title}
-                        </div>
-                      ))}
-                      {dayAppointments.length > 2 && (
-                        <div className="text-xs text-gray-500">
-                          +{dayAppointments.length - 2} mais
-                        </div>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </Card>
-        )}
-
-        {/* Appointments List */}
-        <div className={viewMode === 'calendar' ? 'lg:col-span-1' : 'lg:col-span-3'}>
-          {isLoading ? (
-            <div className="space-y-4">
-              {[1,2,3].map(i => (
-                <Card key={i} className="p-4">
-                  <Skeleton className="h-20 w-full" />
-                </Card>
-              ))}
-            </div>
-          ) : filteredAppointments.length === 0 ? (
-            <Card className="p-8 text-center">
-              <Calendar className="w-12 h-12 mx-auto text-gray-300 mb-3" />
-              <p className="text-gray-500">
-                {selectedDate 
-                  ? 'Nenhum compromisso nesta data'
-                  : 'Nenhum compromisso agendado'
-                }
-              </p>
-            </Card>
-          ) : (
-            <div className="space-y-3">
-              {selectedDate && (
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold">
-                    {format(selectedDate, "d 'de' MMMM", { locale: ptBR })}
-                  </h3>
-                  <Button variant="ghost" size="sm" onClick={() => setSelectedDate(null)}>
-                    Ver todos
-                  </Button>
-                </div>
-              )}
-              {filteredAppointments.map(apt => (
-                <Card key={apt.id} className="p-4 hover:shadow-md transition-shadow">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Badge className={typeColors[apt.type]}>
-                          {typeLabels[apt.type]}
-                        </Badge>
-                        <Badge variant="outline">
-                          {statusLabels[apt.status]}
-                        </Badge>
-                      </div>
-                      <h4 className="font-semibold text-[#1a1a1a]">{apt.title}</h4>
-                      <div className="mt-2 space-y-1 text-sm text-gray-500">
-                        <div className="flex items-center gap-2">
-                          <Calendar className="w-4 h-4" />
-                          {format(parseISO(apt.date), "d 'de' MMMM", { locale: ptBR })}
-                        </div>
-                        {apt.time && (
-                          <div className="flex items-center gap-2">
-                            <Clock className="w-4 h-4" />
-                            {apt.time}
-                          </div>
-                        )}
-                        {apt.location && (
-                          <div className="flex items-center gap-2">
-                            <MapPin className="w-4 h-4" />
-                            {apt.location}
-                          </div>
-                        )}
-                        {apt.client_name && (
-                          <div className="flex items-center gap-2">
-                            <User className="w-4 h-4" />
-                            {apt.client_name}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <MoreVertical className="w-4 h-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleEdit(apt)}>
-                          <Pencil className="w-4 h-4 mr-2" />
-                          Editar
-                        </DropdownMenuItem>
-                        <DropdownMenuItem 
-                          className="text-red-600"
-                          onClick={() => handleDelete(apt)}
-                        >
-                          <Trash2 className="w-4 h-4 mr-2" />
-                          Excluir
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          )}
+      <div className="flex flex-wrap gap-4 items-center bg-white p-3 rounded-xl border border-slate-100 shadow-sm text-sm">
+        <span className="font-semibold text-slate-700 mr-2">Legenda:</span>
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-red-500" />
+          <span className="text-slate-600">Audiência</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-blue-500" />
+          <span className="text-slate-600">Reunião</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-amber-500" />
+          <span className="text-slate-600">Prazo / Aviso</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-green-500" />
+          <span className="text-slate-600">Consulta</span>
         </div>
       </div>
 
-      <AppointmentModal
-        open={modalOpen}
-        onClose={() => {
-          setModalOpen(false);
-          setSelectedAppointment(null);
-        }}
-        onSave={handleSave}
-        appointment={selectedAppointment}
-        clients={clients}
-        processes={processes}
-        isLoading={createMutation.isPending || updateMutation.isPending}
-      />
+      <div className="grid grid-cols-1 lg:grid-cols-7 gap-6">
+        
+        {/* CALENDÁRIO VISUAL */}
+        <div className="lg:col-span-5 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="flex items-center justify-between p-4 border-b">
+            <h2 className="text-lg font-semibold text-slate-800 capitalize">
+              {format(currentDate, "MMMM yyyy", { locale: ptBR })}
+            </h2>
+            <div className="flex gap-1">
+              <Button variant="ghost" size="icon" onClick={handlePrevMonth}><ChevronLeft className="w-5 h-5" /></Button>
+              <Button variant="ghost" size="icon" onClick={handleNextMonth}><ChevronRight className="w-5 h-5" /></Button>
+            </div>
+          </div>
 
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
-            <AlertDialogDescription>
-              Tem certeza que deseja excluir o compromisso "{appointmentToDelete?.title}"? 
-              Esta ação não pode ser desfeita.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-red-600 hover:bg-red-700"
-              onClick={() => deleteMutation.mutate(appointmentToDelete?.id)}
-            >
-              Excluir
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+          <div className="grid grid-cols-7 bg-slate-50 border-b">
+            {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map(day => (
+              <div key={day} className="py-2 text-center text-xs font-semibold text-slate-500 uppercase">
+                {day}
+              </div>
+            ))}
+          </div>
+
+          {/* GRADE DE DIAS */}
+          <div className="grid grid-cols-7 auto-rows-[120px]">
+            {calendarDays.map((day) => {
+              const dayAppts = appointments.filter(a => {
+                if (!a.date) return false;
+                const aDate = a.date.includes('T') ? a.date.split('T')[0] : a.date;
+                return isSameDay(parseISO(aDate), day);
+              });
+              
+              const isSelected = isSameDay(day, selectedDate);
+              const isCurrentMonth = isSameMonth(day, currentDate);
+              const isTodayDay = isToday(day);
+
+              return (
+                <div
+                  key={day.toString()}
+                  onClick={() => handleDateClick(day)}
+                  className={cn(
+                    "border-r border-b p-1 transition-colors cursor-pointer hover:bg-slate-50 relative group flex flex-col",
+                    !isCurrentMonth && "bg-slate-50/50 text-slate-400",
+                    isSelected && "bg-blue-50 ring-inset ring-2 ring-blue-500"
+                  )}
+                >
+                  <div className="flex justify-end p-1">
+                    <span className={cn(
+                      "text-xs font-medium w-6 h-6 flex items-center justify-center rounded-full",
+                      isTodayDay ? "bg-[#1a1a1a] text-white" : "text-slate-700"
+                    )}>
+                      {format(day, "d")}
+                    </span>
+                  </div>
+                  
+                  {/* LISTA DE EVENTOS COM NOME (ATUALIZADO) */}
+                  <div className="flex flex-col gap-1 w-full px-1 overflow-hidden">
+                    {dayAppts.slice(0, 3).map((appt, i) => (
+                      <div 
+                        key={i} 
+                        className={cn(
+                          "text-[10px] px-1.5 py-0.5 rounded-md truncate w-full text-white font-medium shadow-sm cursor-pointer hover:opacity-90",
+                          getTypeColor(appt.type)
+                        )}
+                        title={appt.title}
+                      >
+                        {appt.title}
+                      </div>
+                    ))}
+                    {dayAppts.length > 3 && (
+                      <span className="text-[10px] text-slate-400 pl-1 font-medium">
+                        + {dayAppts.length - 3} mais
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* LISTA LATERAL DO DIA */}
+        <div className="lg:col-span-2 space-y-4">
+          <Card className="h-full border-slate-200 shadow-sm flex flex-col">
+            <CardHeader className="bg-slate-50 border-b pb-4">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <CalendarIcon className="w-5 h-5 text-[#c9a962]" />
+                {format(selectedDate, "dd 'de' MMMM", { locale: ptBR })}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="flex-1 overflow-y-auto p-4 space-y-3 max-h-[600px]">
+              {selectedDayAppointments.length === 0 ? (
+                <div className="text-center py-10 text-slate-400">
+                  <p>Nada agendado para este dia.</p>
+                  <Button 
+                    variant="link" 
+                    className="text-[#c9a962]"
+                    onClick={() => setIsDialogOpen(true)}
+                  >
+                    + Adicionar
+                  </Button>
+                </div>
+              ) : (
+                selectedDayAppointments.map(appt => (
+                  <div 
+                    key={appt.id} 
+                    className="p-3 rounded-lg border border-slate-100 bg-white hover:shadow-md transition-shadow group relative"
+                  >
+                    <div className={cn("absolute left-0 top-0 bottom-0 w-1 rounded-l-lg", getTypeColor(appt.type))} />
+                    
+                    <div className="pl-3">
+                      <div className="flex justify-between items-start">
+                        <span className={cn("text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 mb-1 inline-block")}>
+                          {getTypeLabel(appt.type)}
+                        </span>
+                        
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className={cn(
+                            "h-6 w-6 -mt-1 -mr-1",
+                            appt.isReadOnly ? "text-slate-300 hover:text-amber-500" : "text-slate-300 hover:text-red-500"
+                          )}
+                          onClick={(e) => { e.stopPropagation(); handleDelete(appt); }}
+                        >
+                          {appt.isReadOnly ? <Lock className="w-3 h-3" /> : <Trash2 className="w-3 h-3" />}
+                        </Button>
+                      </div>
+                      
+                      <h4 className="font-semibold text-slate-800 text-sm">{appt.title}</h4>
+                      
+                      <div className="flex items-center gap-3 mt-2 text-xs text-slate-500">
+                        <div className="flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {appt.time}
+                        </div>
+                        {appt.client_name && (
+                          <div className="flex items-center gap-1 truncate max-w-[100px]">
+                            <MapPin className="w-3 h-3" />
+                            {appt.client_name}
+                          </div>
+                        )}
+                      </div>
+                      
+                      {appt.observation && (
+                        <p className="mt-2 text-xs text-slate-400 bg-slate-50 p-2 rounded">
+                          {appt.observation}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </div>
   );
-}
+};
+
+export default Appointments;

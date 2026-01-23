@@ -152,19 +152,31 @@ export default function Dashboard() {
     .sort((a, b) => a.date.localeCompare(b.date))
     .slice(0, 5);
 
-  // Upcoming birthdays
+  // --- LÓGICA DE ANIVERSÁRIOS (PRÓXIMOS 15 DIAS) ---
+  const todayDate = new Date();
+  todayDate.setHours(0, 0, 0, 0); // Zera hora para comparar apenas datas
+
+  const next15DaysDate = new Date(todayDate);
+  next15DaysDate.setDate(todayDate.getDate() + 15);
+
   const upcomingBirthdays = clients
     .filter(c => c.birth_date && c.status === 'active')
     .map(c => {
       const birthDate = parseISO(c.birth_date);
+      // Cria a data de aniversário no ano atual, zerando as horas
       const thisYearBirthday = new Date(currentYear, birthDate.getMonth(), birthDate.getDate());
-      if (thisYearBirthday < new Date()) {
+      thisYearBirthday.setHours(0, 0, 0, 0);
+
+      // Se já passou hoje (considerando data pura), joga pro ano que vem
+      if (thisYearBirthday < todayDate) {
         thisYearBirthday.setFullYear(currentYear + 1);
       }
       return { ...c, nextBirthday: thisYearBirthday };
     })
-    .sort((a, b) => a.nextBirthday - b.nextBirthday)
-    .slice(0, 5);
+    // Filtra apenas se estiver entre HOJE e DAQUI A 15 DIAS
+    .filter(c => c.nextBirthday >= todayDate && c.nextBirthday <= next15DaysDate)
+    .sort((a, b) => a.nextBirthday - b.nextBirthday);
+  // --------------------------------------------------
 
   // Upcoming notices (next 15 days)
   const fifteenDaysFromNow = new Date();
@@ -388,7 +400,7 @@ export default function Dashboard() {
                 <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/20 to-transparent" />
                 <Cake className="w-6 h-6 text-white relative z-10" />
               </div>
-              Aniversários Próximos
+              Aniversários Próximos (15 Dias)
             </CardTitle>
             <Link 
               to={createPageUrl('Clients')}
@@ -407,12 +419,12 @@ export default function Dashboard() {
             ) : upcomingBirthdays.length === 0 ? (
               <div className="text-center py-8 text-gray-400">
                 <Cake className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                <p>Nenhum aniversário registrado</p>
+                <p>Nenhum aniversário nos próximos 15 dias</p>
               </div>
             ) : (
               <div className="space-y-3">
                 {upcomingBirthdays.map(client => {
-                  const daysUntil = differenceInDays(client.nextBirthday, new Date());
+                  const daysUntil = differenceInDays(client.nextBirthday, todayDate);
                   const isClientBirthdayToday = daysUntil === 0;
                   
                   return (
