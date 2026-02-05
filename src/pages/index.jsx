@@ -6,6 +6,9 @@ import { Loader2 } from "lucide-react";
 import Layout from "./Layout";
 import Login from "./Login";
 
+// Importação da Página Pública de Simulação (ADICIONADO)
+import PublicHealthCalculator from "./PublicHealthCalculator";
+
 // Importação das Páginas do Painel
 import Dashboard from "./Dashboard";
 import Clients from "./Clients";
@@ -63,8 +66,13 @@ const Pages = () => {
       }}
     >
       <Routes>
+        {/* Rota Pública (Login) */}
         <Route path="/login" element={<Login />} />
 
+        {/* Rota Pública (Simulação) - ADICIONADO PARA FUNCIONAR O LINK */}
+        <Route path="/simulacao-saude" element={<PublicHealthCalculator />} />
+
+        {/* Rotas Privadas (Protegidas) */}
         <Route path="/" element={
           <PrivateRoute>
             <Layout />

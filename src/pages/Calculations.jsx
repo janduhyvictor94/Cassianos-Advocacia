@@ -36,7 +36,9 @@ import {
   ArrowRightCircle,
   Wand2,
   Settings,
-  ListPlus
+  ListPlus,
+  Link as LinkIcon, // Ícone de Link
+  Copy // Ícone de Copiar
 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { format, differenceInMonths, differenceInDays } from "date-fns";
@@ -58,7 +60,7 @@ const INITIAL_ANS_INDICES = {
   2020: 8.14,
   2019: 7.35,
   2018: 10.00,
-  2017: 13.55,
+  2017: 13.57,
   2016: 13.57,
   2015: 13.55,
   2014: 9.65,
@@ -153,6 +155,26 @@ const Calculations = () => {
     toast({ title: "Índice Atualizado", description: `Ano ${newAnsYear}: ${newAnsValue}%` });
     setNewAnsYear("");
     setNewAnsValue("");
+  };
+
+  // --- FUNÇÃO DE COPIAR LINK ESPECÍFICO ---
+  const handleCopyLink = (type) => {
+    let path = "";
+    if (type === 'saude') path = "/simulacao-saude";
+    // Futuramente: if (type === 'civil') path = "/simulacao-civil";
+    
+    if (!path) {
+        toast({ title: "Em breve", description: "Simulação pública para este tipo ainda não disponível." });
+        return;
+    }
+
+    const url = `${window.location.origin}${path}`;
+    navigator.clipboard.writeText(url);
+    toast({ 
+      title: "Link Copiado!", 
+      description: `Link de simulação (${type}) copiado para a área de transferência.`,
+      className: "bg-green-600 text-white border-none"
+    });
   };
 
   // --- GERADOR SAÚDE ---
@@ -369,16 +391,14 @@ const Calculations = () => {
     const doc = new jsPDF();
     
     // --- DESIGN SYSTEM: CABEÇALHO ---
-    doc.setFillColor(26, 26, 26); // Preto Profundo (#1a1a1a)
+    doc.setFillColor(26, 26, 26); 
     doc.rect(0, 0, 210, 40, 'F');
     
-    // Nome do Escritório
     doc.setFont("times", "bold");
     doc.setFontSize(26);
-    doc.setTextColor(201, 169, 98); // Dourado (#c9a962)
+    doc.setTextColor(201, 169, 98); 
     doc.text("Cassiano's Advocacia", 105, 20, null, null, "center");
     
-    // Subtítulo
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
     doc.setTextColor(255, 255, 255); 
@@ -387,7 +407,6 @@ const Calculations = () => {
     // --- METADADOS ---
     doc.setTextColor(50, 50, 50);
     doc.setFontSize(10);
-    // Data segura
     doc.text(`Data de Emissão: ${format(new Date(), "dd/MM/yyyy", { locale: ptBR })}`, 15, 50);
     doc.text(`Tipo de Cálculo: ${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}`, 15, 56);
 
@@ -405,41 +424,39 @@ const Calculations = () => {
         head = [['Ano', 'Mensalidade Paga', 'Mensalidade Devida', 'Índices Aplicados (Legal)', 'Diferença Mensal', 'A Restituir (Ano)']];
         
         body = (result.data.periods || []).map(p => {
-            // Formatar os índices aplicados de forma limpa
             let indicesText = p.isBase ? "---" : `${p.appliedAns}% (ANS)`;
             if (p.appliedAge > 0) indicesText += ` + ${p.appliedAge}% (Idade)`;
             
             return [
                 { content: p.year.toString(), styles: { fontStyle: 'bold', halign: 'center' } },
-                { content: `R$ ${p.charged?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, styles: { halign: 'right' } },
-                { content: `R$ ${p.correct?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, styles: { halign: 'right', fontStyle: 'bold', textColor: [34, 197, 94] } }, // Verde para correto
+                { content: `R$ ${p.charged?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}`, styles: { halign: 'right' } },
+                { content: `R$ ${p.correct?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}`, styles: { halign: 'right', fontStyle: 'bold', textColor: [34, 197, 94] } }, 
                 { content: indicesText, styles: { halign: 'center', fontSize: 8 } },
-                { content: p.isBase ? '-' : `R$ ${p.monthlyDiff?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, styles: { halign: 'right', textColor: [220, 38, 38] } }, // Vermelho
-                { content: p.isBase ? '-' : `R$ ${p.annualDiff?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, styles: { halign: 'right', fontStyle: 'bold' } }
+                { content: p.isBase ? '-' : `R$ ${p.monthlyDiff?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}`, styles: { halign: 'right', textColor: [220, 38, 38] } }, 
+                { content: p.isBase ? '-' : `R$ ${p.annualDiff?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}`, styles: { halign: 'right', fontStyle: 'bold' } }
             ];
         });
 
-        // Adicionar Linhas de Totais ao final da tabela
+        // Totais
         body.push([
             { content: 'TOTAL RESTITUIÇÃO (SIMPLES)', colSpan: 5, styles: { halign: 'right', fontStyle: 'bold', fillColor: [240, 240, 240] } },
-            { content: `R$ ${result.data.totalDiff?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, styles: { fontStyle: 'bold', fillColor: [240, 240, 240], textColor: [26, 26, 26] } }
+            { content: `R$ ${result.data.totalDiff?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}`, styles: { fontStyle: 'bold', fillColor: [240, 240, 240], textColor: [26, 26, 26] } }
         ]);
         body.push([
-            { content: 'TOTAL RESTITUIÇÃO (DOBRO)', colSpan: 5, styles: { halign: 'right', fontStyle: 'bold', fillColor: [255, 248, 220] } }, // Fundo levemente dourado
-            { content: `R$ ${result.data.totalDouble?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, styles: { fontStyle: 'bold', fillColor: [255, 248, 220], textColor: [201, 169, 98] } }
+            { content: 'TOTAL RESTITUIÇÃO (DOBRO)', colSpan: 5, styles: { halign: 'right', fontStyle: 'bold', fillColor: [255, 248, 220] } }, 
+            { content: `R$ ${result.data.totalDouble?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}`, styles: { fontStyle: 'bold', fillColor: [255, 248, 220], textColor: [201, 169, 98] } }
         ]);
 
     } else {
-        // Genérico para outros tipos (Cível/Bancário)
         head = [['Item', 'Valor Calculado']];
         if (activeTab === 'civil') {
              body = [
-                ['Valor Original', `R$ ${result.data.original?.toFixed(2)}`],
+                ['Valor Original', `R$ ${result.data.original?.toFixed(2) || '0.00'}`],
                 ['Correção + Juros', `R$ ${(result.data.total - result.data.original)?.toFixed(2)}`],
-                [{ content: 'TOTAL', styles: { fontStyle: 'bold' } }, { content: `R$ ${result.data.total?.toFixed(2)}`, styles: { fontStyle: 'bold' } }]
+                [{ content: 'TOTAL', styles: { fontStyle: 'bold' } }, { content: `R$ ${result.data.total?.toFixed(2) || '0.00'}`, styles: { fontStyle: 'bold' } }]
              ];
         } else {
-             body = [['Total', `R$ ${result.data.total?.toFixed(2)}`]];
+             body = [['Total', `R$ ${result.data.total?.toFixed(2) || '0.00'}`]];
         }
     }
 
@@ -464,21 +481,18 @@ const Calculations = () => {
         fillColor: [250, 250, 250]
       },
       columnStyles: {
-        0: { cellWidth: 20 }, // Ano curto
-        3: { cellWidth: 50 }  // Espaço maior para descrição dos índices
+        0: { cellWidth: 20 }, 
+        3: { cellWidth: 50 } 
       }
     });
 
-    // --- RODAPÉ ---
     const pageCount = doc.internal.getNumberOfPages();
     for(let i = 1; i <= pageCount; i++) {
         doc.setPage(i);
         const pageHeight = doc.internal.pageSize.height;
-        
         doc.setDrawColor(201, 169, 98);
         doc.setLineWidth(0.5);
         doc.line(15, pageHeight - 20, 195, pageHeight - 20);
-        
         doc.setFontSize(8);
         doc.setTextColor(120, 120, 120);
         doc.text("Documento gerado eletronicamente. Este relatório não substitui laudo pericial oficial.", 15, pageHeight - 12);
@@ -491,13 +505,11 @@ const Calculations = () => {
   const handleExportExcel = () => {
     if (!result) return;
     let data = [];
-    
-    // Cabeçalho Profissional no Excel
     const headerInfo = [
         ["CASSIANO'S ADVOCACIA"],
         ["Relatório de Cálculos"],
         ["Data:", format(new Date(), "dd/MM/yyyy")],
-        [""] // Linha em branco
+        [""] 
     ];
 
     if (activeTab === 'saude') {
@@ -506,7 +518,7 @@ const Calculations = () => {
             p.year,
             p.charged,
             p.correct,
-            p.appliedAns ? p.appliedAns/100 : 0, // Formato decimal para %
+            p.appliedAns ? p.appliedAns/100 : 0, 
             p.appliedAge ? p.appliedAge/100 : 0,
             p.monthlyDiff,
             p.annualDiff
@@ -515,12 +527,10 @@ const Calculations = () => {
             ["", "", "", "", "", "TOTAL SIMPLES:", result.data.totalDiff],
             ["", "", "", "", "", "TOTAL DOBRO:", result.data.totalDouble]
         ];
-        
         data = [...headerInfo, tableHeader, ...tableBody, ["", ""], ...totals];
     } else {
         data = [...headerInfo, ["Total", result.data.total || 0]];
     }
-    
     const ws = XLSX.utils.aoa_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Relatório");
@@ -554,7 +564,6 @@ const Calculations = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* INPUTS */}
         <div className="lg:col-span-2">
           <Card className="border-slate-200 shadow-sm">
             <CardContent className="p-6">
@@ -609,29 +618,36 @@ const Calculations = () => {
                         <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
                           <Wand2 className="w-4 h-4 text-[#c9a962]" /> Gerador Automático
                         </h3>
-                        <Dialog open={isAnsModalOpen} onOpenChange={setIsAnsModalOpen}>
-                          <DialogTrigger asChild>
-                            <Button variant="outline" size="sm" className="h-7 text-xs gap-1"><Settings className="w-3 h-3" /> Config ANS</Button>
-                          </DialogTrigger>
-                          <DialogContent>
-                            <DialogHeader>
-                              <DialogTitle>Índices ANS</DialogTitle>
-                              <DialogDescription className="text-xs text-gray-500">Configuração de taxas anuais.</DialogDescription>
-                            </DialogHeader>
-                            <div className="grid gap-4 py-4">
-                              <div className="grid grid-cols-3 gap-2">
-                                <Input placeholder="Ano" value={newAnsYear} onChange={e => setNewAnsYear(e.target.value)} type="number" />
-                                <Input placeholder="Valor %" value={newAnsValue} onChange={e => setNewAnsValue(e.target.value)} type="number" />
-                                <Button onClick={handleAddAnsIndex} className="bg-[#c9a962] text-black"><ListPlus className="w-4 h-4" /></Button>
-                              </div>
-                              <div className="h-[200px] overflow-y-auto border rounded p-2 text-sm space-y-1">
-                                {Object.entries(ansIndices).sort((a,b) => b[0] - a[0]).map(([y, v]) => (
-                                  <div key={y} className="flex justify-between border-b pb-1"><span>{y}</span><span className="font-bold">{v}%</span></div>
-                                ))}
-                              </div>
-                            </div>
-                          </DialogContent>
-                        </Dialog>
+                        <div className="flex gap-2">
+                            {/* BOTÃO LINK DE SIMULAÇÃO AQUI DENTRO */}
+                            <Button variant="outline" size="sm" onClick={() => handleCopyLink('saude')} className="h-7 text-xs gap-1 border-green-600 text-green-700 bg-white hover:bg-green-50">
+                                <LinkIcon className="w-3 h-3" /> Link Simulação
+                            </Button>
+                            
+                            <Dialog open={isAnsModalOpen} onOpenChange={setIsAnsModalOpen}>
+                              <DialogTrigger asChild>
+                                <Button variant="outline" size="sm" className="h-7 text-xs gap-1"><Settings className="w-3 h-3" /> Config ANS</Button>
+                              </DialogTrigger>
+                              <DialogContent>
+                                <DialogHeader>
+                                  <DialogTitle>Índices ANS</DialogTitle>
+                                  <DialogDescription className="text-xs text-gray-500">Configuração de taxas anuais.</DialogDescription>
+                                </DialogHeader>
+                                <div className="grid gap-4 py-4">
+                                  <div className="grid grid-cols-3 gap-2">
+                                    <Input placeholder="Ano" value={newAnsYear} onChange={e => setNewAnsYear(e.target.value)} type="number" />
+                                    <Input placeholder="Valor %" value={newAnsValue} onChange={e => setNewAnsValue(e.target.value)} type="number" />
+                                    <Button onClick={handleAddAnsIndex} className="bg-[#c9a962] text-black"><ListPlus className="w-4 h-4" /></Button>
+                                  </div>
+                                  <div className="h-[200px] overflow-y-auto border rounded p-2 text-sm space-y-1">
+                                    {Object.entries(ansIndices).sort((a,b) => b[0] - a[0]).map(([y, v]) => (
+                                      <div key={y} className="flex justify-between border-b pb-1"><span>{y}</span><span className="font-bold">{v}%</span></div>
+                                    ))}
+                                  </div>
+                                </div>
+                              </DialogContent>
+                            </Dialog>
+                        </div>
                       </div>
                       <div className="grid grid-cols-3 gap-3">
                          <div><Label className="text-xs">Ano Inicial</Label><Input type="number" value={healthGen.startYear} onChange={e => setHealthGen({...healthGen, startYear: e.target.value})} className="bg-white" /></div>
@@ -681,7 +697,6 @@ const Calculations = () => {
           </Card>
         </div>
 
-        {/* COLUNA RESULTADOS + HISTÓRICO */}
         <div className="space-y-6">
           {result && (
             <Card className="bg-[#1a1a1a] text-white border-none shadow-xl">
