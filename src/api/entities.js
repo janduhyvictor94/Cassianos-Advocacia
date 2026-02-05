@@ -75,6 +75,7 @@ const createEntityManager = (tableName) => ({
   }
 });
 
+// --- EXPORTAÇÃO DAS ENTIDADES PADRÃO ---
 export const Client = createEntityManager('clients');
 export const Process = createEntityManager('processes');
 export const Financial = createEntityManager('financial');
@@ -82,6 +83,44 @@ export const Appointment = createEntityManager('appointments');
 export const Campaign = createEntityManager('campaigns');
 export const Notice = createEntityManager('notices');
 export const Visit = createEntityManager('visits');
+
+// --- NOVA ENTIDADE: CÁLCULOS ---
+// Implementação manual necessária para fazer o JOIN com clientes e lidar com JSON
+export const Calculation = {
+  list: async () => {
+    const { data, error } = await supabase
+      .from('calculations')
+      .select('*, clients(name)') // Join para pegar o nome do cliente
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    
+    // Mapeia para facilitar o uso no frontend
+    return data.map(item => ({
+      ...item,
+      client_name: item.clients?.name || 'Sem Cliente'
+    }));
+  },
+
+  create: async (calcData) => {
+    // Inserção direta (JSONs complexos não precisam passar pelo sanitizeValue monetário)
+    const { data, error } = await supabase
+      .from('calculations')
+      .insert([calcData])
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  delete: async (id) => {
+    const { error } = await supabase
+      .from('calculations')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
+    return true;
+  }
+};
 
 // --- AUTENTICAÇÃO REAL (SUPABASE) ---
 export const User = {

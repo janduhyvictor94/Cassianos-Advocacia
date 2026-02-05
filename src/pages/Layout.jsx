@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Outlet, Link, useLocation } from "react-router-dom";
-import { cn } from "@/lib/utils"; // <--- ESTA LINHA É A QUE FALTAVA
+import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,7 +15,8 @@ import {
   FileText,
   Menu,
   X,
-  LogOut
+  LogOut,
+  Calculator // Adicionado
 } from "lucide-react";
 import { User } from "@/api/entities";
 import { supabase } from "@/api/supabaseClient";
@@ -27,7 +28,6 @@ const Layout = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const { toast } = useToast();
 
-  // --- OUVINTE DE ATUALIZAÇÕES (REALTIME) ---
   useEffect(() => {
     const channel = supabase
       .channel('process-updates')
@@ -35,12 +35,10 @@ const Layout = () => {
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'processes' },
         (payload) => {
-          // Tocar som (opcional)
           const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
           audio.volume = 0.5;
-          audio.play().catch(() => {}); // Ignora erro se navegador bloquear som
+          audio.play().catch(() => {});
 
-          // Mostrar alerta
           toast({
             title: "Processo Atualizado!",
             description: `O processo ${payload.new.number} acabou de sofrer alterações.`,
@@ -60,6 +58,7 @@ const Layout = () => {
     { name: "Clientes", icon: Users, path: "/clients" },
     { name: "Processos", icon: Scale, path: "/processes" },
     { name: "Agenda", icon: Calendar, path: "/appointments" },
+    { name: "Cálculos", icon: Calculator, path: "/calculations" }, // Novo Item
     { name: "Avisos", icon: Bell, path: "/notices" },
     { name: "Financeiro", icon: DollarSign, path: "/financial" },
     { name: "Visitas", icon: Building, path: "/visits" },
@@ -69,7 +68,6 @@ const Layout = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 flex font-sans">
-      {/* Overlay para Celular */}
       {isMobile && isSidebarOpen && (
         <div 
           className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
@@ -77,7 +75,6 @@ const Layout = () => {
         />
       )}
 
-      {/* Barra Lateral (Menu) */}
       <aside
         className={cn(
           "fixed inset-y-0 left-0 z-50 w-72 bg-[#1a1a1a] text-white transition-transform duration-300 ease-in-out shadow-2xl flex flex-col",
@@ -85,7 +82,6 @@ const Layout = () => {
           !isMobile && "relative"
         )}
       >
-        {/* Logo */}
         <div className="h-20 flex items-center px-6 border-b border-white/5 relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[#c9a962]/50 to-transparent opacity-50"></div>
           
@@ -105,7 +101,6 @@ const Layout = () => {
           )}
         </div>
 
-        {/* Links de Navegação */}
         <nav className="flex-1 overflow-y-auto py-6 px-4 space-y-2">
           {navItems.map((item) => {
             const isActive = location.pathname === item.path || 
@@ -144,7 +139,6 @@ const Layout = () => {
           })}
         </nav>
 
-        {/* Rodapé do Menu */}
         <div className="p-4 border-t border-white/5 bg-gradient-to-t from-black/40 to-transparent">
           <Button 
             variant="ghost" 
@@ -165,9 +159,7 @@ const Layout = () => {
         </div>
       </aside>
 
-      {/* Conteúdo Principal */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden bg-slate-50/50">
-        {/* Header Mobile */}
         {isMobile && (
           <header className="h-16 bg-white border-b border-slate-200 flex items-center px-4 justify-between sticky top-0 z-30 shadow-sm">
              <Button variant="ghost" size="icon" onClick={() => setIsSidebarOpen(true)}>

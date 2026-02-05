@@ -4,7 +4,7 @@ import { supabase } from "@/api/supabaseClient";
 import { Loader2 } from "lucide-react";
 
 import Layout from "./Layout";
-import Login from "./Login"; // Nova página
+import Login from "./Login";
 
 // Importação das Páginas do Painel
 import Dashboard from "./Dashboard";
@@ -16,20 +16,19 @@ import Campaigns from "./Campaigns";
 import Notices from "./Notices";
 import Visits from "./Visits";
 import Reports from "./Reports";
+import Calculations from "./Calculations"; // Nova página
 
-// Componente que protege as rotas (O "Segurança" do site)
+// Componente que protege as rotas
 const PrivateRoute = ({ children }) => {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Verifica sessão atual
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setLoading(false);
     });
 
-    // Escuta mudanças (login/logout)
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -48,12 +47,10 @@ const PrivateRoute = ({ children }) => {
     );
   }
 
-  // Se não tem sessão, manda pro login
   if (!session) {
     return <Navigate to="/login" replace />;
   }
 
-  // Se tem sessão, mostra o conteúdo
   return children;
 };
 
@@ -66,10 +63,8 @@ const Pages = () => {
       }}
     >
       <Routes>
-        {/* Rota Pública (Login) */}
         <Route path="/login" element={<Login />} />
 
-        {/* Rotas Privadas (Protegidas) */}
         <Route path="/" element={
           <PrivateRoute>
             <Layout />
@@ -80,6 +75,7 @@ const Pages = () => {
           <Route path="processes" element={<Processes />} />
           <Route path="financial" element={<Financial />} />
           <Route path="appointments" element={<Appointments />} />
+          <Route path="calculations" element={<Calculations />} /> {/* Nova Rota */}
           <Route path="campaigns" element={<Campaigns />} />
           <Route path="notices" element={<Notices />} />
           <Route path="visits" element={<Visits />} />
